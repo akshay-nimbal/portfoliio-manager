@@ -55,8 +55,6 @@ npm install
 
 ```
 
-That's it — no API keys, no database, no extra services.
-
 ## Running
 
 ### Development
