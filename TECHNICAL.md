@@ -63,7 +63,7 @@ in-flight requests). Empirically that's the threshold above which
 Google starts returning HTTP 429 / 302 to the consent page. Yahoo
 tolerates **6 concurrent** requests cleanly.
 
-### Challenge 5 — Real-time updates without hammering upstream
+### Challenge 4 — Real-time updates without hammering upstream
 
 **What happened:** the brief asks for refresh every 15 seconds.
 Naïvely that's 26 holdings × 2 providers = 52 upstream calls every 15
@@ -85,7 +85,7 @@ hidden (`refetchIntervalInBackground: false`).
 loader throws, the previous cached value is returned instead of
 failing — the UI shows a slightly old number rather than a blank cell.
 
-### Challenge 6 — Dev mode showed an empty page (CSP too strict)
+### Challenge 5 — Dev mode showed an empty page (CSP too strict)
 
 **What happened:** after wiring up CSP headers (`default-src 'self'`),
 `npm run dev` rendered an empty page in the browser. The terminal was
@@ -106,7 +106,7 @@ blocked both.
 This keeps the developer experience snappy without weakening the
 shipped artefact.
 
-### Challenge 7 — Reading holdings from a real Excel workbook
+### Challenge 6 — Reading holdings from a real Excel workbook
 
 **What happened:** the case-study Excel sheet is not a simple table.
 It has:
@@ -144,33 +144,5 @@ Swapping this for a database query later is a single-file change — the
 rest of the app only depends on the `Holding[]` shape returned by
 `getHoldings()`.
 
-### Challenge 8 — Sector-allocation chart didn't differentiate gains from losses
-
-**What happened:** the original Recharts bar chart drew every "Current"
-bar in the same colour, so a sector that was *down* visually looked
-identical to one that was up.
-
-**Solution:** swap a single `<Bar fill="…">` for `<Bar>` containing one
-`<Cell fill={…}/>` per sector, where the colour is derived from the
-sector's gain:
-
-- gain ≥ 0 → green (`#10b981`)
-- gain < 0 → red   (`#ef4444`)
-
-A custom legend was added so the meaning is obvious at a glance:
-`Invested` (slate), `Current (Gain)` (green), `Current (Loss)` (red).
-
-### Challenge 9 — Macro-level developer ergonomics
-
-A handful of small annoyances that ate enough time to be worth
-recording:
-
-| Annoyance | Solution |
-|---|---|
-| `Watchpack Error: EMFILE: too many open files` floods the terminal on macOS | Documented `ulimit -n 10240` in the README's troubleshooting section. |
-| `next.config.ts` rejected by Next.js 14 (`.ts` config not supported) | Renamed to `next.config.mjs` and converted to ESM JS. |
-| `outputFileTracingIncludes` warning | Moved inside `experimental` per Next.js 14 schema. |
-| Stale `.next/` cache caused 404s after switching between `dev` / `build` | `rm -rf .next` documented in troubleshooting. |
-| `git push` with a token in the URL leaked the token to shell history | Switched to an **inline credential helper** (`-c http.extraheader=…`) for ad-hoc pushes; ran `gh auth refresh` after revoking the leaked PAT. |
 
 ---
