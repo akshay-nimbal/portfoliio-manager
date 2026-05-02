@@ -4,13 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { PortfolioResponse } from "@/types/portfolio";
 
-/**
- * Refresh interval used by the portfolio dashboard.
- *
- * The assignment asks for "regular intervals (e.g., every 15 seconds)" so we
- * default to 15s. This is overridable via NEXT_PUBLIC_REFRESH_INTERVAL_MS so
- * it can be tuned without a code change in different environments.
- */
+// Default 15s per the assignment, overridable via env so we can dial it
+// down in slow environments (or up if Yahoo gets cranky).
 const REFRESH_INTERVAL_MS = (() => {
   const raw = Number(process.env.NEXT_PUBLIC_REFRESH_INTERVAL_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 15_000;
@@ -18,7 +13,6 @@ const REFRESH_INTERVAL_MS = (() => {
 
 async function fetchPortfolio(): Promise<PortfolioResponse> {
   const res = await fetch("/api/portfolio", {
-    // Bypass any browser cache; the server route also sets no-store.
     cache: "no-store",
     headers: { Accept: "application/json" },
   });
@@ -31,18 +25,16 @@ async function fetchPortfolio(): Promise<PortfolioResponse> {
   return (await res.json()) as PortfolioResponse;
 }
 
-/**
- * Single source of truth for the dashboard's live data. React Query handles:
- *  - polling on REFRESH_INTERVAL_MS (also when the tab is hidden -> we keep
- *    the previous data on screen so users don't see flicker on focus).
- *  - request de-duplication.
- *  - exposing isFetching/isError/dataUpdatedAt so we can render a status bar.
- */
+// Single source of truth for the dashboard's live data. React Query handles
+// polling, de-duplication, and exposes the isFetching/isError flags the
+// status bar reads.
 export function usePortfolio() {
   return useQuery<PortfolioResponse, Error>({
     queryKey: ["portfolio"],
     queryFn: fetchPortfolio,
     refetchInterval: REFRESH_INTERVAL_MS,
+    // Pause polling when the tab is in the background - no point burning
+    // through the rate limit for a tab the user isn't looking at.
     refetchIntervalInBackground: false,
   });
 }

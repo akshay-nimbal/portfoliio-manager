@@ -28,7 +28,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Tabular numerals make the financial figures align cleanly column-to-column. */
+/* Stops the financial columns from jiggling between renders. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }

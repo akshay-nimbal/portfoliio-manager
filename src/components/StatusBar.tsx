@@ -12,11 +12,8 @@ interface Props {
   onRefresh: () => void;
 }
 
-/**
- * Shows the user when the data was last updated, when the next refresh is
- * due, and exposes a manual refresh button. Also surfaces non-fatal
- * provider warnings (e.g. "Google Finance lookup failed for X").
- */
+// Pill + countdown + manual refresh button. Also where non-fatal warnings
+// (e.g. Google scraper failed) get surfaced.
 export function StatusBar({
   isFetching,
   isError,

@@ -5,34 +5,15 @@ import * as XLSX from "xlsx";
 
 import type { Exchange, Holding } from "@/types/portfolio";
 
-/**
- * Portfolio data source.
- *
- * The investor maintains their holdings in an Excel sheet (kept under
- * `src/data/*.xlsx`). At the first request we open the workbook, parse out
- * the holdings rows from the first sheet and cache the result for the
- * lifetime of the Node process. The xlsx file is read from disk - no user
- * upload path - so we trust its contents.
- *
- * Recognised sheet shape (matches the format used by the case study):
- *
- *   Row 0:  Top-level group headers ("Core Fundamentals", "Growth …")
- *   Row 1:  Column headers ("No", "Particulars", "Purchase Price", "Qty",
- *           "Investment", "Portfolio (%)", "NSE/BSE", "CMP", …)
- *   Row 2+: Either a sector header row (No empty, Particulars set, Investment set)
- *           or a holding row (No is a positive integer, Particulars set).
- *           A blank row terminates the active portfolio (anything after - the
- *           "Sold Price" section in the sample - is intentionally ignored).
- *
- * Symbol routing: the NSE/BSE column may contain either an NSE ticker
- * (alphabetic, e.g. "HDFCBANK") or a BSE numeric code (e.g. "532174"). The
- * loader detects which and builds the right Yahoo (`*.NS` / `*.BO`) and
- * Google (`*:NSE` / `*:BOM`) symbols.
- */
+// Reads holdings out of the investor's Excel sheet (drop one into src/data/).
+// The sheet layout the case study ships with is annoyingly non-tabular:
+// group banners, sector header rows mixed in with stock rows, a grand-total
+// row, then a "Sold Price" section we have to ignore. So no nice
+// sheet_to_json - we walk row by row.
 
 const DATA_DIR = path.join(process.cwd(), "src", "data");
 
-/** Column indices we care about (0-based, matching the sheet's row 1 header). */
+// 0-based, matches the column header row.
 const COL = {
   NO: 0,
   PARTICULARS: 1,
@@ -48,7 +29,7 @@ const BSE_CODE_RE = /^\d{5,7}$/;
 
 let cache: Holding[] | null = null;
 
-/** Find the first .xlsx in src/data (case-insensitive). */
+// First .xlsx wins - lets the user drop a workbook in without renaming it.
 function locateWorkbook(): string | null {
   if (!fs.existsSync(DATA_DIR)) return null;
   const file = fs
@@ -71,16 +52,13 @@ function asNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Strip "Sector"/"Sectors" suffix and clean up whitespace. */
+// "Financial Sector" -> "Financial", trim and default if blank.
 function normaliseSectorName(raw: string): string {
   return raw.replace(/\s*sectors?\s*$/i, "").trim() || "Uncategorised";
 }
 
-/**
- * Make a stable, URL-safe id from a stock name. Used as React key + cache key.
- * We don't use the symbol directly because BSE codes can collide with each
- * other across exchanges and pure-numeric ids look weird in dev tools.
- */
+// React key + cache key. Plain symbol won't do - bare BSE codes look
+// like garbage in dev tools and could collide across exchanges.
 function makeId(name: string, symbol: string): string {
   return `${name}-${symbol}`
     .toLowerCase()
@@ -95,7 +73,7 @@ interface Routed {
   symbol: string;
 }
 
-/** Decide whether the cell holds an NSE ticker or a BSE numeric code. */
+// Alphabetic -> NSE ticker, numeric -> BSE code, anything else (#N/A, blank...) -> drop.
 function routeSymbol(rawCell: unknown): Routed | null {
   const cell = asString(rawCell).toUpperCase();
   if (!cell) return null;
@@ -116,7 +94,6 @@ function routeSymbol(rawCell: unknown): Routed | null {
       googleSymbol: `${cell}:BOM`,
     };
   }
-  // Anything else (e.g. "#N/A", whitespace, blank) is unusable.
   return null;
 }
 
@@ -140,7 +117,7 @@ function readRow(row: unknown[]): RawRow {
   };
 }
 
-/** True if the row is the grand-total summary row (no name, only investment). */
+// Grand-total row: no name, just an Investment number.
 function isGrandTotal(r: RawRow): boolean {
   return (
     asString(r.no) === "" &&
@@ -150,7 +127,7 @@ function isGrandTotal(r: RawRow): boolean {
   );
 }
 
-/** True if the row is a sector header (no row number, has a name and a total). */
+// Sector header: name + total, but no row number / price / qty.
 function isSectorHeader(r: RawRow): boolean {
   return (
     asString(r.no) === "" &&
@@ -161,7 +138,7 @@ function isSectorHeader(r: RawRow): boolean {
   );
 }
 
-/** True if the row is a real stock holding. */
+// A real holding has a row number, a name, a price and a quantity.
 function isStockRow(r: RawRow): boolean {
   return (
     asNumber(r.no) !== null &&
@@ -187,46 +164,34 @@ function parseWorkbook(file: string): Holding[] {
   let currentSector = "Uncategorised";
   let consecutiveBlanks = 0;
 
-  // Skip the two header rows (R0 group headers, R1 column labels).
+  // R0 = group banners, R1 = column headers, real data starts at R2.
   for (let i = 2; i < rows.length; i++) {
     const parsed = readRow(rows[i]);
 
-    // A blank row likely marks the end of the active portfolio. Two in a row
-    // is the unambiguous terminator (the file may have a single blank gap
-    // before the grand total in some templates).
     const isBlank =
       asString(parsed.no) === "" &&
       parsed.name === "" &&
       parsed.investment === null;
 
     if (isBlank) {
+      // First blank ends the active portfolio. Anything below is the
+      // "Sold Price" block, which we don't want.
       if (++consecutiveBlanks >= 1) break;
       continue;
     }
     consecutiveBlanks = 0;
 
-    if (isGrandTotal(parsed)) {
-      // Everything after the grand total (e.g. the "Sold Price" section)
-      // is intentionally ignored - those positions are no longer held.
-      break;
-    }
+    if (isGrandTotal(parsed)) break; // same reason - "Sold" lives below this
 
     if (isSectorHeader(parsed)) {
       currentSector = normaliseSectorName(parsed.name);
       continue;
     }
 
-    if (!isStockRow(parsed)) {
-      // Unknown row layout - skip rather than crash.
-      continue;
-    }
+    if (!isStockRow(parsed)) continue; // weird row, skip rather than crash
 
     const routed = routeSymbol(parsed.exchangeCell);
-    if (!routed) {
-      // Stocks without a usable exchange symbol cannot be priced; skip them
-      // so the table doesn't end up with a row that's permanently "—".
-      continue;
-    }
+    if (!routed) continue; // no usable symbol -> would render forever as "—"
 
     holdings.push({
       id: makeId(parsed.name, routed.symbol),
@@ -244,13 +209,9 @@ function parseWorkbook(file: string): Holding[] {
   return holdings;
 }
 
-/**
- * Public accessor. Lazily reads & caches the workbook on first call.
- *
- * If no .xlsx is found in `src/data/` we fall back to an empty list and log
- * a warning - this lets the dashboard render a clear "no holdings" state
- * instead of crashing.
- */
+// Lazy + memoised. Restart the dev/prod server to pick up workbook edits.
+// On a missing/broken xlsx we fall back to [] and log so the UI can show
+// an empty state instead of crashing.
 export function getHoldings(): Holding[] {
   if (cache !== null) return cache;
 
@@ -276,7 +237,7 @@ export function getHoldings(): Holding[] {
   return cache;
 }
 
-/** Test/debug hook: drop the cache so the next read re-parses the file. */
+// Used by tests to force a re-parse.
 export function _resetHoldingsCache(): void {
   cache = null;
 }

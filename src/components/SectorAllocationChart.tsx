@@ -32,15 +32,13 @@ const fmtINRCompact = new Intl.NumberFormat("en-IN", {
   currency: "INR",
 });
 
-// Tailwind `gain`/`loss` palette - kept in sync with tailwind.config.ts.
+// Keep these in sync with `gain`/`loss` in tailwind.config.ts.
 const GAIN = "#10b981";
 const LOSS = "#ef4444";
 const INVESTED = "#94a3b8";
 
-/**
- * Side-by-side comparison of invested capital vs. current value per sector.
- * Helps spot which sectors are dragging or driving the portfolio at a glance.
- */
+// Invested vs. current value, side by side per sector. Quick glance answer
+// to "which sector is dragging?" - red bar = loss.
 export function SectorAllocationChart({ sectors }: Props) {
   const data: ChartDatum[] = sectors.map((s) => ({
     sector: s.sector,

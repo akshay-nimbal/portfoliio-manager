@@ -20,10 +20,8 @@ interface Props {
   sectors: SectorGroup[];
 }
 
-/**
- * Tone helper: green for positive numbers, red for negative, neutral for zero.
- * Returns a Tailwind color class (used both in cells and the sector summary).
- */
+// green for gains, red for losses, slate for zero/null. Used by row cells
+// and by the sector summary in the header.
 function tone(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "text-slate-500";
@@ -33,10 +31,7 @@ function tone(value: number | null | undefined): string {
   return "text-slate-500";
 }
 
-/**
- * Render the column definitions once. We keep them outside the row-loop so
- * react-table's row models can memoise effectively.
- */
+// Defined outside the row loop so react-table's memoisation actually works.
 function buildColumns(): ColumnDef<PortfolioRow>[] {
   return [
     {
@@ -148,10 +143,7 @@ function buildColumns(): ColumnDef<PortfolioRow>[] {
   ];
 }
 
-/**
- * Per-sector table. Each sector renders as its own table with a coloured
- * footer row that aggregates the sector totals.
- */
+// One table per sector, with the sector's roll-up totals in the header.
 function SectorTable({ group }: { group: SectorGroup }) {
   const columns = useMemo(buildColumns, []);
 

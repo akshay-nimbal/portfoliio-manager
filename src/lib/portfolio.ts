@@ -1,10 +1,5 @@
-/**
- * Pure functions that turn raw holdings + live quotes into the response
- * shape consumed by the UI.
- *
- * Keeping this side-effect free makes it trivial to unit-test and lets us
- * reuse the same aggregator on the client (e.g. for optimistic updates).
- */
+// Pure aggregation - holdings + quotes -> the API response shape. No IO,
+// no side effects, easy to unit test.
 
 import type {
   Holding,
@@ -17,12 +12,12 @@ import type {
 
 interface BuildArgs {
   holdings: Holding[];
-  /** Map keyed by holding.id -> quote. Missing entries become null fields. */
+  // keyed by holding.id; missing entries -> null fields on the row
   quotes: Map<string, Quote>;
   warnings: string[];
 }
 
-/** Round to 2 decimal places without introducing FP noise in JSON output. */
+// Avoids 0.1+0.2 noise leaking into the JSON.
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 function safe<T>(value: T | null | undefined): T | null {
@@ -51,8 +46,7 @@ function rowFor(holding: Holding, quote: Quote | undefined): PortfolioRow {
     presentValue,
     gainLoss,
     gainLossPercent,
-    // portfolioPercent gets filled in by the caller once it knows the total.
-    portfolioPercent: 0,
+    portfolioPercent: 0, // filled in once we know the grand total
   };
 }
 
@@ -83,10 +77,9 @@ export function buildPortfolio({
   quotes,
   warnings,
 }: BuildArgs): PortfolioResponse {
-  // 1. Convert each holding into an enriched row.
   const rows = holdings.map((h) => rowFor(h, quotes.get(h.id)));
 
-  // 2. Compute portfolio total investment and back-fill weight %.
+  // Backfill portfolio % now that we know the total.
   const totalInvestment = rows.reduce((acc, r) => acc + r.investment, 0);
   for (const row of rows) {
     row.portfolioPercent =
@@ -95,7 +88,8 @@ export function buildPortfolio({
         : round2((row.investment / totalInvestment) * 100);
   }
 
-  // 3. Group by sector preserving the order of first appearance.
+  // Group by sector, preserving first-seen order so the UI stays stable
+  // when the workbook is re-ordered.
   const sectorOrder: string[] = [];
   const bySector = new Map<string, PortfolioRow[]>();
   for (const row of rows) {
@@ -115,7 +109,6 @@ export function buildPortfolio({
     };
   });
 
-  // 4. Roll up portfolio-wide totals.
   const totalPresentValue = rows.reduce(
     (acc, r) => acc + (r.presentValue ?? 0),
     0,

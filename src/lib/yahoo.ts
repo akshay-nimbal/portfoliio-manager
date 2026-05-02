@@ -1,25 +1,15 @@
-/**
- * Yahoo Finance client (v8 chart endpoint - no auth required).
- *
- * Background:
- *   The widely used `yahoo-finance2` library wraps Yahoo's v7 quote API,
- *   which - since 2023 - requires a "crumb" (CSRF) token. Fetching that
- *   crumb relies on a consent-cookie flow that frequently breaks for
- *   non-EU/non-US clients (e.g. India), causing the whole quote call to
- *   fail silently. We hit that exact issue from this machine.
- *
- *   Yahoo's v8 chart endpoint (`/v8/finance/chart/<SYMBOL>`) is public,
- *   needs no crumb, and returns the regular-market price in its `meta`
- *   block. It's slightly less rich (no `trailingPE` / `epsTtm`) but for
- *   CMP it is far more reliable, and we already source P/E + EPS from
- *   Google Finance.
- *
- * Coverage notes:
- *   - NSE tickers like `HDFCBANK.NS` work everywhere.
- *   - BSE numeric codes (`<code>.BO`) are sparsely covered on Yahoo. When
- *     a `.BO` symbol returns "Not Found" we leave CMP as null here and
- *     let the API route fall back to the Google scraper.
- */
+// Yahoo Finance CMP client.
+//
+// Originally tried `yahoo-finance2` (wraps the v7 quote API). It needs a
+// CSRF "crumb" which you only get after Yahoo's GDPR consent redirect, and
+// that whole dance never completes from an Indian IP - every call returned
+// empty. The v8 chart endpoint below is the public fallback: no crumb, no
+// consent, just `regularMarketPrice` in the meta block. Less metadata than
+// v7 quote, but P/E + EPS come from Google anyway so we don't need it.
+//
+// Coverage caveat: NSE tickers (HDFCBANK.NS) work fine; BSE numeric codes
+// (532174.BO) are hit-and-miss. We return null on a miss and let the API
+// route cascade to Google.
 
 import axios from "axios";
 
@@ -28,9 +18,9 @@ import { cacheFetch } from "@/lib/cache";
 const BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
 const TTL = Number(process.env.YAHOO_CACHE_TTL_SECONDS ?? 15);
 const REQUEST_TIMEOUT_MS = 8000;
-const MAX_CONCURRENCY = 6;
+const MAX_CONCURRENCY = 6; // any higher and Yahoo starts throttling
 
-// Allow-list: <ALPHANUM-WITH-DOT-DASH>.<EXCH-SUFFIX> e.g. HDFCBANK.NS, 532174.BO.
+// e.g. HDFCBANK.NS, 532174.BO
 const SYMBOL_RE = /^[A-Z0-9.\-]{1,25}$/;
 
 export interface YahooQuote {
@@ -68,9 +58,7 @@ async function fetchOne(symbol: string): Promise<YahooQuote> {
 
       const res = await axios.get<ChartResponse>(url.toString(), {
         timeout: REQUEST_TIMEOUT_MS,
-        // Yahoo never redirects this endpoint; refuse redirects so we can't
-        // be tricked into hitting an unintended host (SSRF defence).
-        maxRedirects: 0,
+        maxRedirects: 0, // v8 chart never redirects; refuse to be bounced elsewhere
         responseType: "json",
         validateStatus: (s) => s >= 200 && s < 500, // accept 404 so we can read its body
         headers: {
@@ -91,13 +79,8 @@ async function fetchOne(symbol: string): Promise<YahooQuote> {
   );
 }
 
-/**
- * Batch fetch quotes for many symbols. Returns a Map keyed by the
- * requested symbol so callers can correlate results back to their holdings.
- *
- * Bounded concurrency keeps us from issuing 26+ parallel requests on every
- * 15s tick - Yahoo will throttle that aggressively.
- */
+// Batch fetch via a tiny worker pool. Returned map is keyed by the symbol
+// the caller asked for, so they can correlate back to their holdings.
 export async function fetchYahooQuotes(
   symbols: string[],
 ): Promise<Map<string, YahooQuote>> {
@@ -111,8 +94,7 @@ export async function fetchYahooQuotes(
       try {
         result.set(symbol, await fetchOne(symbol));
       } catch {
-        // Soft fail: leave CMP as null. The Google scraper acts as the
-        // fallback in the API aggregator.
+        // soft-fail: caller will fall back to Google
         result.set(symbol, { cmp: null });
       }
     }

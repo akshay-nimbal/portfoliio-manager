@@ -1,15 +1,7 @@
-/**
- * Tiny in-memory TTL cache.
- *
- * The dashboard polls on a short interval and we don't want each request to
- * hammer Yahoo/Google. We use a simple Map keyed by a string and store a
- * timestamp alongside the value. Anything expired is treated as a miss.
- *
- * This is module-scoped which means it lives for the lifetime of the Node
- * process - perfect for `next dev`/`next start`. For multi-instance
- * deployments (Vercel/Lambda) you would swap this for Redis behind the same
- * `get`/`set` interface, but the call sites would not change.
- */
+// Tiny in-memory TTL cache. Lives for the lifetime of the Node process,
+// which is exactly what we want for `next dev` / single-instance deploys.
+// On Vercel / multi-replica setups this fragments per process - swap the
+// three exports below for a Redis client when that becomes a problem.
 
 interface Entry<T> {
   value: T;
@@ -35,14 +27,9 @@ export function cacheSet<T>(key: string, value: T, ttlSeconds: number): void {
   });
 }
 
-/**
- * Fetch-or-compute helper. If the cache has a fresh value it is returned
- * immediately; otherwise `loader` runs and its result is cached.
- *
- * If the loader throws and `staleOnError` is provided, we return the stale
- * value rather than bubbling the error up - this keeps the UI populated
- * during transient upstream outages.
- */
+// Fetch-or-compute. If `staleOnError` is set and the loader throws, return
+// the previous value instead of bubbling the error - keeps the UI populated
+// during a transient upstream blip.
 export async function cacheFetch<T>(
   key: string,
   ttlSeconds: number,

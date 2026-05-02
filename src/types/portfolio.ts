@@ -1,55 +1,34 @@
-/**
- * Domain types for the portfolio dashboard.
- * Kept framework-agnostic so they can be reused by API handlers and React components.
- */
+// Domain types shared by the API route, the aggregator and the React tree.
 
 export type Exchange = "NSE" | "BSE";
 
-/**
- * A single holding as defined statically in the portfolio (the "input" side).
- * The fields here are entered by the investor and never change at runtime.
- */
+// What the investor entered (purchase side). These never change at runtime.
 export interface Holding {
-  /** Unique id for React keys (kept stable). */
   id: string;
-  /** Display name (e.g. "HDFC Bank"). */
   name: string;
-  /** Exchange ticker symbol (e.g. "HDFCBANK"). */
   symbol: string;
-  /** Yahoo Finance symbol (NSE symbols are usually `<SYMBOL>.NS`). */
+  // e.g. HDFCBANK.NS / 532174.BO
   yahooSymbol: string;
-  /** Google Finance symbol path (e.g. "HDFCBANK:NSE"). */
+  // e.g. HDFCBANK:NSE / 532174:BOM
   googleSymbol: string;
-  /** Exchange where it is listed. */
   exchange: Exchange;
-  /** Sector bucket used for grouping (e.g. "Financials"). */
   sector: string;
-  /** Average purchase price in INR. */
   purchasePrice: number;
-  /** Number of shares held. */
   quantity: number;
 }
 
-/**
- * Live quote returned from the upstream finance providers.
- * `null` fields indicate a soft failure - the row should still render with
- * a clear "—" placeholder rather than crashing the whole table.
- */
+// Live quote from upstream. Nullable everywhere because either provider can
+// fail per-symbol and we don't want to crash the row.
 export interface Quote {
-  /** Current Market Price (Yahoo Finance). */
   cmp: number | null;
-  /** Trailing P/E (Google Finance, falls back to Yahoo). */
   peRatio: number | null;
-  /** Latest reported earnings (EPS string from Google Finance). */
+  // EPS comes back as a free-form string (e.g. "₹65.21") - kept as-is for display.
   latestEarnings: string | null;
-  /** Provider that satisfied the request, useful for debugging in dev. */
+  // Useful when debugging which provider populated this row.
   source?: "yahoo" | "google" | "mixed" | "stale-cache";
 }
 
-/**
- * A holding enriched with live market data and derived analytics.
- * This is the row shape consumed by the table component.
- */
+// Holding + quote + derived analytics. This is what the table renders.
 export interface PortfolioRow extends Holding {
   cmp: number | null;
   peRatio: number | null;
@@ -58,11 +37,10 @@ export interface PortfolioRow extends Holding {
   presentValue: number | null;
   gainLoss: number | null;
   gainLossPercent: number | null;
-  /** Weight of this holding in the overall portfolio (0-100). */
+  // 0..100
   portfolioPercent: number;
 }
 
-/** Aggregated metrics for a single sector. */
 export interface SectorSummary {
   sector: string;
   totalInvestment: number;
@@ -72,14 +50,13 @@ export interface SectorSummary {
   rowCount: number;
 }
 
-/** A sector bucket with its rows and roll-up totals. */
 export interface SectorGroup {
   sector: string;
   rows: PortfolioRow[];
   summary: SectorSummary;
 }
 
-/** Top-level response shape returned by `/api/portfolio`. */
+// What /api/portfolio returns.
 export interface PortfolioResponse {
   generatedAt: string;
   totals: {
@@ -89,6 +66,6 @@ export interface PortfolioResponse {
     gainLossPercent: number;
   };
   sectors: SectorGroup[];
-  /** Non-fatal warnings (e.g. partial provider failures). */
+  // non-fatal stuff (e.g. "Yahoo Finance lookup failed")
   warnings: string[];
 }

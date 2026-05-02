@@ -1,7 +1,4 @@
-/**
- * Display-time formatting helpers. Used by both server (logging) and client
- * (table rendering). Kept dependency-free so they tree-shake cleanly.
- */
+// Display formatters. Used by both client and server, hence dependency-free.
 
 const INR = new Intl.NumberFormat("en-IN", {
   style: "currency",

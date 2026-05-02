@@ -1,16 +1,10 @@
-/**
- * Build the Content-Security-Policy header.
- *
- * Production: tight policy - same-origin scripts/styles only, no eval, no
- * external connections, framing forbidden.
- *
- * Development: Next.js + webpack HMR need extra capabilities or the page
- * silently fails to hydrate:
- *   - 'unsafe-eval'  -> webpack's `eval()` source maps
- *   - 'unsafe-inline'-> Next.js dev runtime inline scripts
- *   - blob:          -> source-map blobs
- *   - ws:/wss: in connect-src for the HMR socket
- */
+// CSP. Prod is locked down; dev needs extras or Next's HMR silently kills
+// the page (you get a blank screen, no console error - took a while to
+// figure that one out the first time).
+//   unsafe-eval   - webpack's eval() source maps
+//   unsafe-inline - Next dev runtime inline scripts
+//   blob:         - source-map blobs
+//   ws:/wss:      - HMR websocket in connect-src
 function buildCsp(isDev) {
   const scriptSrc = isDev
     ? "'self' 'unsafe-inline' 'unsafe-eval' blob:"
@@ -35,12 +29,13 @@ const isDev = process.env.NODE_ENV !== "production";
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // Keep heavy / dynamic-require packages outside the webpack bundle so
-  // they're loaded by Node at runtime instead. `outputFileTracingIncludes`
-  // makes sure the investor's workbook is shipped with the API route in
-  // standalone builds (Vercel / Docker).
   experimental: {
+    // xlsx uses dynamic requires - leave it to Node at runtime instead of
+    // letting webpack bundle it (saves a bunch of warnings + bundle size).
     serverComponentsExternalPackages: ["xlsx"],
+    // Make sure the workbook is copied into the standalone build's
+    // function bundle (Vercel / Docker), otherwise the API route 500s in
+    // prod with ENOENT.
     outputFileTracingIncludes: {
       "/api/portfolio": ["./src/data/*.xlsx"],
     },
