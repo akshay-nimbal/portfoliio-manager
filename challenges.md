@@ -1,6 +1,4 @@
-# Technical Document
-
-## 1. Challenges encountered & how each was solved
+# Challenges encountered & how each was solved
 
 ### Challenge 1 — Neither provider has an official API
 
